@@ -1,0 +1,286 @@
+digraph "Terraform Blue-Green Deployment Dependencies" {
+  // Graph settings - TB = Top to Bottom (creation order)
+  rankdir = TB;
+  compound = true;
+  nodesep = 0.5;
+  ranksep = 0.8;
+
+  node [
+    shape = box,
+    style = "rounded,filled",
+    fontname = "Arial",
+    fontsize = 11
+  ];
+
+  edge [
+    fontname = "Arial",
+    fontsize = 9
+  ];
+
+  // ==================== LAYER 1: Infrastructure ====================
+  subgraph cluster_infra {
+    label = "第 7 层：基础设施层 (最后销毁)";
+    style = filled;
+    color = "#E8F4F8";
+    fontsize = 12;
+    fontcolor = "#1976D2";
+
+    vpc [label="VPC\naws_vpc.main", fillcolor="#B3E5FC"];
+    subnets [label="Public Subnets\naws_subnet.public[*]", fillcolor="#B3E5FC"];
+    igw [label="Internet Gateway\naws_internet_gateway.igw", fillcolor="#B3E5FC"];
+    rt [label="Route Table\naws_route_table.public", fillcolor="#B3E5FC"];
+  }
+
+  // ==================== LAYER 2: Security ====================
+  subgraph cluster_security {
+    label = "第 6 层：安全组层";
+    style = filled;
+    color = "#F3E5F5";
+    fontsize = 12;
+    fontcolor = "#7B1FA2";
+
+    sg_alb [label="ALB Security Group\naws_security_group.alb", fillcolor="#E1BEE7"];
+    sg_ec2 [label="EC2 Security Group\naws_security_group.ec2", fillcolor="#E1BEE7"];
+  }
+
+  // ==================== LAYER 3: Load Balancer ====================
+  subgraph cluster_lb {
+    label = "第 5 层：负载均衡器层";
+    style = filled;
+    color = "#FFF9C4";
+    fontsize = 12;
+    fontcolor = "#F57F17";
+
+    alb [label="Application Load Balancer\naws_lb.app", fillcolor="#FFF59D"];
+  }
+
+  // ==================== LAYER 4: Target Groups ====================
+  subgraph cluster_tg {
+    label = "第 4 层：目标组层";
+    style = filled;
+    color = "#FFECB3";
+    fontsize = 12;
+    fontcolor = "#FF6F00";
+
+    tg_blue [
+      label="Blue Target Group\naws_lb_target_group.blue\n⚡ deregistration_delay=30s",
+      fillcolor="#FFE082"
+    ];
+    tg_green [
+      label="Green Target Group\naws_lb_target_group.green\n⚡ deregistration_delay=30s",
+      fillcolor="#A5D6A7"
+    ];
+  }
+
+  // ==================== LAYER 5: Routing ====================
+  subgraph cluster_routing {
+    label = "第 3 层：流量路由层";
+    style = filled;
+    color = "#C8E6C9";
+    fontsize = 12;
+    fontcolor = "#2E7D32";
+
+    listener [
+      label="HTTP Listener\naws_lb_listener.http\nPort: 80 → Blue TG",
+      fillcolor="#A5D6A7"
+    ];
+
+    rule [
+      label="Canary Listener Rule\naws_lb_listener_rule.canary\n(weighted routing)",
+      fillcolor="#81C784"
+    ];
+  }
+
+  // ==================== LAYER 6: Launch Templates ====================
+  subgraph cluster_templates {
+    label = "第 2 层：启动模板层";
+    style = filled;
+    color = "#FFCCBC";
+    fontsize = 12;
+    fontcolor = "#BF360C";
+
+    lt_blue [label="Blue Launch Template\naws_launch_template.blue", fillcolor="#FFAB91"];
+    lt_green [label="Green Launch Template\naws_launch_template.green", fillcolor="#A5D6A7"];
+  }
+
+  // ==================== LAYER 7: Auto Scaling Groups ====================
+  subgraph cluster_asg {
+    label = "第 1 层：Auto Scaling 层 (最先销毁 🎯)";
+    style = filled;
+    color = "#FFCDD2";
+    fontsize = 12;
+    fontcolor = "#C62828";
+
+    asg_blue [
+      label="Blue ASG\naws_autoscaling_group.blue\n⚡ force_delete=true\n⚡ timeout=15m",
+      fillcolor="#EF9A9A"
+    ];
+
+    asg_green [
+      label="Green ASG\naws_autoscaling_group.green\n⚡ force_delete=true\n⚡ timeout=15m",
+      fillcolor="#A5D6A7"
+    ];
+  }
+
+  // ==================== Infrastructure Dependencies ====================
+  vpc -> subnets [label="provides"];
+  vpc -> igw [label="provides"];
+  igw -> rt [label="routes through"];
+  vpc -> sg_alb [label="vpc_id"];
+  vpc -> sg_ec2 [label="vpc_id"];
+
+  // ==================== ALB Dependencies ====================
+  subnets -> alb [label="subnets"];
+  sg_alb -> alb [label="security_groups"];
+
+  // ==================== Target Group Dependencies ====================
+  alb -> tg_blue [
+    label="depends_on",
+    color="#D32F2F",
+    penwidth=2,
+    style=bold
+  ];
+  alb -> tg_green [
+    label="depends_on",
+    color="#D32F2F",
+    penwidth=2,
+    style=bold
+  ];
+  vpc -> tg_blue [label="vpc_id", style=dashed];
+  vpc -> tg_green [label="vpc_id", style=dashed];
+
+  // ==================== Listener Dependencies ====================
+  alb -> listener [label="load_balancer_arn"];
+  tg_blue -> listener [
+    label="depends_on",
+    color="#D32F2F",
+    penwidth=2,
+    style=bold
+  ];
+  tg_green -> listener [
+    label="depends_on",
+    color="#D32F2F",
+    penwidth=2,
+    style=bold
+  ];
+
+  // ==================== Listener Rule Dependencies ====================
+  listener -> rule [label="listener_arn"];
+  tg_blue -> rule [
+    label="depends_on",
+    color="#D32F2F",
+    penwidth=2,
+    style=bold
+  ];
+  tg_green -> rule [
+    label="depends_on",
+    color="#D32F2F",
+    penwidth=2,
+    style=bold
+  ];
+
+  // ==================== Launch Template Dependencies ====================
+  sg_ec2 -> lt_blue [label="security_groups"];
+  sg_ec2 -> lt_green [label="security_groups"];
+
+  // ==================== ASG Dependencies (CRITICAL!) ====================
+  subnets -> asg_blue [label="vpc_zone_identifier", style=dashed];
+  subnets -> asg_green [label="vpc_zone_identifier", style=dashed];
+
+  lt_blue -> asg_blue [
+    label="depends_on",
+    color="#D32F2F",
+    penwidth=2,
+    style=bold
+  ];
+  lt_green -> asg_green [
+    label="depends_on",
+    color="#D32F2F",
+    penwidth=2,
+    style=bold
+  ];
+
+  tg_blue -> asg_blue [
+    label="target_group_arns +\ndepends_on",
+    color="#D32F2F",
+    penwidth=2,
+    style=bold
+  ];
+  tg_green -> asg_green [
+    label="target_group_arns +\ndepends_on",
+    color="#D32F2F",
+    penwidth=2,
+    style=bold
+  ];
+
+  // KEY DEPENDENCIES - These solve the destroy hang issue!
+  listener -> asg_blue [
+    label="depends_on\n🔑 KEY!",
+    color="#C62828",
+    penwidth=4,
+    style=bold
+  ];
+  listener -> asg_green [
+    label="depends_on\n🔑 KEY!",
+    color="#C62828",
+    penwidth=4,
+    style=bold
+  ];
+  rule -> asg_green [
+    label="depends_on\n🔑 KEY!",
+    color="#C62828",
+    penwidth=4,
+    style=bold
+  ];
+
+  // ==================== Legend ====================
+  subgraph cluster_legend {
+    label = "图例说明";
+    style = filled;
+    color = white;
+    fontsize = 12;
+
+    node [shape=plaintext, fillcolor=white];
+
+    legend [
+      label=<
+        <TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4">
+          <TR><TD COLSPAN="2" BGCOLOR="#E3F2FD"><B>依赖关系类型</B></TD></TR>
+          <TR>
+            <TD ALIGN="LEFT">细线</TD>
+            <TD ALIGN="LEFT">隐式依赖 (属性引用)</TD>
+          </TR>
+          <TR>
+            <TD ALIGN="LEFT"><FONT COLOR="#D32F2F">粗红线</FONT></TD>
+            <TD ALIGN="LEFT">显式依赖 (depends_on)</TD>
+          </TR>
+          <TR>
+            <TD ALIGN="LEFT"><FONT COLOR="#C62828">超粗深红线 🔑</FONT></TD>
+            <TD ALIGN="LEFT">关键依赖 (解决销毁卡住)</TD>
+          </TR>
+          <TR><TD COLSPAN="2" BGCOLOR="#E3F2FD"><B>销毁顺序 (从上到下)</B></TD></TR>
+          <TR><TD ALIGN="LEFT">1️⃣</TD><TD ALIGN="LEFT">Auto Scaling Groups (Blue & Green)</TD></TR>
+          <TR><TD ALIGN="LEFT">2️⃣</TD><TD ALIGN="LEFT">Canary Listener Rule</TD></TR>
+          <TR><TD ALIGN="LEFT">3️⃣</TD><TD ALIGN="LEFT">HTTP Listener</TD></TR>
+          <TR><TD ALIGN="LEFT">4️⃣</TD><TD ALIGN="LEFT">Target Groups (Blue & Green)</TD></TR>
+          <TR><TD ALIGN="LEFT">5️⃣</TD><TD ALIGN="LEFT">Application Load Balancer</TD></TR>
+          <TR><TD ALIGN="LEFT">6️⃣</TD><TD ALIGN="LEFT">Security Groups & Templates</TD></TR>
+          <TR><TD ALIGN="LEFT">7️⃣</TD><TD ALIGN="LEFT">VPC, Subnets, IGW</TD></TR>
+        </TABLE>
+      >
+    ];
+  }
+
+  // Graph title and metadata
+  label = <<BR/>
+    <B><FONT POINT-SIZE="16">Terraform 蓝绿部署依赖关系图</FONT></B><BR/>
+    <BR/>
+    <B>核心解决方案：</B> ASG 的 depends_on 包含 Listener<BR/>
+    确保销毁时 ASG 先于 Listener 销毁，避免实例注销卡住<BR/>
+    <BR/>
+    <B>优化配置：</B> deregistration_delay=30s + force_delete=true + timeout=15m<BR/>
+    <BR/>
+  >;
+  labelloc = t;
+  fontsize = 14;
+}

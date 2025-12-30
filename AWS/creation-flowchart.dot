@@ -1,0 +1,388 @@
+digraph "Terraform Blue-Green Deployment Creation Flow" {
+  // Graph settings - Top to bottom flow
+  rankdir = TB;
+  splines = ortho;
+  nodesep = 0.8;
+  ranksep = 1.0;
+
+  node [
+    shape = box,
+    style = "rounded,filled",
+    fontname = "Arial",
+    fontsize = 11,
+    width = 3.5
+  ];
+
+  edge [
+    fontname = "Arial",
+    fontsize = 10,
+    penwidth = 2
+  ];
+
+  // Start node
+  start [
+    label = "🚀 开始创建\nterraform apply",
+    shape = ellipse,
+    fillcolor = "#4CAF50",
+    fontcolor = white,
+    fontsize = 13,
+    style = "filled,bold"
+  ];
+
+  // ==================== Stage 1: Foundation ====================
+  subgraph cluster_stage1 {
+    label = "第 1 阶段：基础网络层 (0-30 秒)";
+    style = filled;
+    color = "#E3F2FD";
+    fontsize = 12;
+    fontcolor = "#1565C0";
+
+    step1 [
+      label = "步骤 1: 创建 VPC\naws_vpc.main\nCIDR: 10.0.0.0/16",
+      fillcolor = "#BBDEFB"
+    ];
+
+    step2 [
+      label = "步骤 2: 创建 Internet Gateway\naws_internet_gateway.igw\n连接到 VPC",
+      fillcolor = "#90CAF9"
+    ];
+
+    step3 [
+      label = "步骤 3: 创建 Public Subnets\naws_subnet.public[0,1]\n2 个可用区\n10.0.1.0/24, 10.0.2.0/24",
+      fillcolor = "#64B5F6"
+    ];
+
+    step4 [
+      label = "步骤 4: 创建路由表\naws_route_table.public\n关联 IGW，启用公网访问",
+      fillcolor = "#42A5F5"
+    ];
+  }
+
+  // ==================== Stage 2: Security ====================
+  subgraph cluster_stage2 {
+    label = "第 2 阶段：安全层 (30-45 秒)";
+    style = filled;
+    color = "#F3E5F5";
+    fontsize = 12;
+    fontcolor = "#6A1B9A";
+
+    step5 [
+      label = "步骤 5: 创建 ALB Security Group\naws_security_group.alb\n允许: 0.0.0.0/0:80 入站\n允许: 所有出站",
+      fillcolor = "#E1BEE7"
+    ];
+
+    step6 [
+      label = "步骤 6: 创建 EC2 Security Group\naws_security_group.ec2\n允许: ALB → EC2:80\n允许: 所有出站",
+      fillcolor = "#CE93D8"
+    ];
+  }
+
+  // ==================== Stage 3: Load Balancer ====================
+  subgraph cluster_stage3 {
+    label = "第 3 阶段：负载均衡器层 (45-90 秒)";
+    style = filled;
+    color = "#FFF9C4";
+    fontsize = 12;
+    fontcolor = "#F57F00";
+
+    step7 [
+      label = "步骤 7: 创建 Application Load Balancer\naws_lb.app\n类型: application\n跨 2 个 Subnets\n⏱ 等待 ALB 就绪 (~2 分钟)",
+      fillcolor = "#FFF59D"
+    ];
+
+    wait1 [
+      label = "⏳ 等待 ALB 状态变为 active\nAWS 预配置 ALB 节点",
+      shape = note,
+      fillcolor = "#FFEB3B",
+      fontsize = 10
+    ];
+  }
+
+  // ==================== Stage 4: Target Groups ====================
+  subgraph cluster_stage4 {
+    label = "第 4 阶段：目标组层 (90-100 秒)";
+    style = filled;
+    color = "#FFECB3";
+    fontsize = 12;
+    fontcolor = "#E65100";
+
+    step8 [
+      label = "步骤 8: 创建 Blue Target Group\naws_lb_target_group.blue\nPort: 80, Protocol: HTTP\n⚡ deregistration_delay: 30s\n健康检查: / 每 15s",
+      fillcolor = "#FFE082"
+    ];
+
+    step9 [
+      label = "步骤 9: 创建 Green Target Group\naws_lb_target_group.green\nPort: 80, Protocol: HTTP\n⚡ deregistration_delay: 30s\n健康检查: / 每 15s",
+      fillcolor = "#C8E6C9"
+    ];
+
+    parallel1 [
+      label = "并行创建",
+      shape = diamond,
+      fillcolor = "#FDD835",
+      fontsize = 10
+    ];
+  }
+
+  // ==================== Stage 5: Launch Templates ====================
+  subgraph cluster_stage5 {
+    label = "第 5 阶段：启动模板层 (100-110 秒) - 提前创建";
+    style = filled;
+    color = "#FFCCBC";
+    fontsize = 12;
+    fontcolor = "#BF360C";
+
+    step10 [
+      label = "步骤 10: 创建 Blue Launch Template\naws_launch_template.blue\nAMI: Ubuntu 22.04\nInstance Type: t3.micro\nUser Data: 蓝色环境网页\n✅ depends_on: EC2 SG",
+      fillcolor = "#FFAB91"
+    ];
+
+    step11 [
+      label = "步骤 11: 创建 Green Launch Template\naws_launch_template.green\nAMI: Ubuntu 22.04\nInstance Type: t3.micro\nUser Data: 绿色环境网页\n✅ depends_on: EC2 SG",
+      fillcolor = "#A5D6A7"
+    ];
+
+    parallel2 [
+      label = "并行创建",
+      shape = diamond,
+      fillcolor = "#FF8A65",
+      fontsize = 10
+    ];
+  }
+
+  // ==================== Stage 6: Auto Scaling Groups ====================
+  subgraph cluster_stage6 {
+    label = "第 6 阶段：计算资源层 (110-180 秒) - 提前创建 + 等待就绪";
+    style = filled;
+    color = "#FFCDD2";
+    fontsize = 12;
+    fontcolor = "#B71C1C";
+
+    step12 [
+      label = "步骤 12: 创建 Blue ASG\naws_autoscaling_group.blue\nDesired/Min/Max: 2\ntarget_group_arns: [blue TG]\n⚡ wait_for_elb_capacity: 2\n⚡ wait_for_capacity_timeout: 10m\n⚡ force_delete: true\n✅ depends_on: Blue TG + Blue LT\n⚠️ 移除了对 Listener 的依赖",
+      fillcolor = "#EF9A9A"
+    ];
+
+    wait2 [
+      label = "⏳ Terraform 等待实例健康（关键！）\n1. 启动 2 个 EC2 实例 (~30s)\n2. 执行 User Data 脚本 (~20s)\n3. 注册到 Blue TG (~5s)\n4. 第一次健康检查 (~15s)\n5. 第二次健康检查通过 ✓ (~15s)\n\nTerraform 轮询确认：2 个实例状态为 healthy",
+      shape = note,
+      fillcolor = "#FFCDD2",
+      fontsize = 10
+    ];
+
+    step13 [
+      label = "步骤 13: 创建 Green ASG\naws_autoscaling_group.green\n(如果 enable_green_env = true)\nDesired/Min/Max: 根据变量\n⚡ wait_for_elb_capacity: green_count\n⚡ wait_for_capacity_timeout: 10m\n⚡ force_delete: true\n✅ depends_on: Green TG + Green LT\n⚠️ 移除了对 Listener/Rule 的依赖",
+      fillcolor = "#A5D6A7"
+    ];
+
+    condition2 [
+      label = "enable_green_env\n= true?",
+      shape = diamond,
+      fillcolor = "#E57373",
+      fontsize = 10
+    ];
+
+    wait3 [
+      label = "⏳ Terraform 等待 Green 实例健康\n同样的启动和健康检查流程",
+      shape = note,
+      fillcolor = "#C8E6C9",
+      fontsize = 10
+    ];
+  }
+
+  // ==================== Stage 7: Routing (MOVED HERE) ====================
+  subgraph cluster_stage7 {
+    label = "第 7 阶段：流量路由层 (180-190 秒) - 延后创建，实例已就绪 ✓";
+    style = filled;
+    color = "#C8E6C9";
+    fontsize = 12;
+    fontcolor = "#1B5E20";
+
+    step14 [
+      label = "步骤 14: 创建 HTTP Listener\naws_lb_listener.http\nPort: 80\ndefault_action: forward → blue TG\n✅ depends_on: ALB + TGs + Blue ASG\n🎯 关键：此时 Blue TG 中已有健康实例！",
+      fillcolor = "#A5D6A7"
+    ];
+
+    step15 [
+      label = "步骤 15: 创建 Canary Listener Rule\naws_lb_listener_rule.canary\n(如果 enable_green_env = true)\n加权转发:\n  Blue: 100%, Green: 0%\n✅ depends_on: Listener + TGs\n🎯 关键：两个环境都已健康！",
+      fillcolor = "#81C784"
+    ];
+
+    condition1 [
+      label = "enable_green_env\n= true?",
+      shape = diamond,
+      fillcolor = "#66BB6A",
+      fontsize = 10
+    ];
+  }
+
+  // ==================== Stage 8: Verification ====================
+  subgraph cluster_stage8 {
+    label = "第 8 阶段：验证和完成 (180-200 秒)";
+    style = filled;
+    color = "#C8E6C9";
+    fontsize = 12;
+    fontcolor = "#2E7D32";
+
+    step16 [
+      label = "步骤 16: 验证健康检查\n所有 Target Group 实例状态: healthy\nALB 开始接收流量",
+      fillcolor = "#A5D6A7"
+    ];
+
+    step17 [
+      label = "步骤 17: 输出资源信息\nalb_dns_name\nblue_asg_name\ngreen_asg_name (如果存在)",
+      fillcolor = "#81C784"
+    ];
+  }
+
+  // End node
+  end [
+    label = "✅ 创建完成\n基础设施就绪",
+    shape = ellipse,
+    fillcolor = "#4CAF50",
+    fontcolor = white,
+    fontsize = 13,
+    style = "filled,bold"
+  ];
+
+  // ==================== Flow Connections ====================
+
+  // Start
+  start -> step1 [label="terraform apply", color="#4CAF50", penwidth=3];
+
+  // Stage 1: Foundation
+  step1 -> step2 [label="VPC ID"];
+  step2 -> step3 [label="并行", color="#2196F3"];
+  step2 -> step4 [label="并行", color="#2196F3"];
+  step3 -> step5 [label="继续", style=dashed];
+  step4 -> step5 [label="继续", style=dashed];
+
+  // Stage 2: Security
+  step5 -> step6 [label="SG 配置"];
+  step6 -> step7 [label="安全组就绪"];
+
+  // Stage 3: Load Balancer
+  step7 -> wait1 [label="创建中", style=dashed, color="#FF9800"];
+  wait1 -> parallel1 [label="ALB active"];
+
+  // Stage 4: Target Groups
+  parallel1 -> step8 [label="并行", color="#2196F3"];
+  parallel1 -> step9 [label="并行", color="#2196F3"];
+  step8 -> parallel2 [label="Blue TG 就绪"];
+  step9 -> parallel2 [label="Green TG 就绪"];
+
+  // Stage 5: Launch Templates (提前创建)
+  parallel2 -> step10 [label="并行", color="#2196F3"];
+  parallel2 -> step11 [label="并行", color="#2196F3"];
+
+  // Stage 6: Auto Scaling Groups (提前创建 + 等待健康)
+  step10 -> step12 [label="Blue LT 就绪"];
+  step11 -> condition2 [label="Green LT 就绪"];
+
+  step12 -> wait2 [label="创建中", style=dashed, color="#FF9800"];
+  wait2 -> step14 [label="Blue 实例健康 ✓", color="#4CAF50", penwidth=3];
+
+  condition2 -> step13 [label="是", color="#4CAF50"];
+  condition2 -> step14 [label="否\n(跳过 Green)", color="#9E9E9E", style=dashed];
+  step13 -> wait3 [label="创建中", style=dashed, color="#FF9800"];
+  wait3 -> step14 [label="Green 实例健康 ✓", color="#4CAF50", penwidth=3];
+
+  // Stage 7: Routing (延后创建，实例已就绪)
+  step14 -> condition1 [label="Listener 准备创建"];
+  condition1 -> step15 [label="是（创建 Rule）", color="#4CAF50"];
+  condition1 -> step16 [label="否\n(跳过 Rule)", color="#9E9E9E", style=dashed];
+  step15 -> step16 [label="Rule 就绪"];
+
+  // Stage 8: Verification
+  step16 -> step17 [label="健康检查通过"];
+  step17 -> end [label="完成", color="#4CAF50", penwidth=3];
+
+  // ==================== Legend ====================
+  subgraph cluster_legend {
+    label = "图例说明";
+    style = filled;
+    color = white;
+    fontsize = 12;
+    rank = sink;
+
+    node [shape=plaintext, fillcolor=white];
+
+    legend [
+      label=<
+        <TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="6">
+          <TR><TD COLSPAN="2" BGCOLOR="#E3F2FD"><B>流程符号</B></TD></TR>
+          <TR>
+            <TD ALIGN="LEFT">圆角矩形</TD>
+            <TD ALIGN="LEFT">创建步骤</TD>
+          </TR>
+          <TR>
+            <TD ALIGN="LEFT">菱形</TD>
+            <TD ALIGN="LEFT">条件判断 / 并行点</TD>
+          </TR>
+          <TR>
+            <TD ALIGN="LEFT">便签</TD>
+            <TD ALIGN="LEFT">等待 / 说明</TD>
+          </TR>
+          <TR>
+            <TD ALIGN="LEFT">椭圆</TD>
+            <TD ALIGN="LEFT">开始 / 结束</TD>
+          </TR>
+          <TR><TD COLSPAN="2" BGCOLOR="#E3F2FD"><B>连线类型</B></TD></TR>
+          <TR>
+            <TD ALIGN="LEFT"><FONT COLOR="#2196F3">蓝色实线</FONT></TD>
+            <TD ALIGN="LEFT">并行创建</TD>
+          </TR>
+          <TR>
+            <TD ALIGN="LEFT"><FONT COLOR="#FF9800">橙色虚线</FONT></TD>
+            <TD ALIGN="LEFT">等待状态</TD>
+          </TR>
+          <TR>
+            <TD ALIGN="LEFT">灰色虚线</TD>
+            <TD ALIGN="LEFT">条件跳过</TD>
+          </TR>
+          <TR>
+            <TD ALIGN="LEFT"><FONT COLOR="#4CAF50">绿色粗线</FONT></TD>
+            <TD ALIGN="LEFT">主流程</TD>
+          </TR>
+          <TR><TD COLSPAN="2" BGCOLOR="#E3F2FD"><B>总耗时</B></TD></TR>
+          <TR><TD COLSPAN="2" ALIGN="CENTER">
+            <B>约 3-4 分钟</B><BR/>
+            (仅 Blue 环境)<BR/>
+            <B>约 5-6 分钟</B><BR/>
+            (Blue + Green 环境)
+          </TD></TR>
+        </TABLE>
+      >
+    ];
+  }
+
+  // Graph title
+  label = <<BR/>
+    <B><FONT POINT-SIZE="18" COLOR="#4CAF50">Terraform 蓝绿部署 - 零中断创建流程图</FONT></B><BR/>
+    <BR/>
+    <B><FONT COLOR="#F44336">关键变更（解决业务中断问题）：</FONT></B><BR/>
+    • Listener depends_on: ALB + TGs + Blue ASG (等待实例健康后才创建路由) ✅<BR/>
+    • Blue ASG 移除了对 Listener 的依赖（避免循环）✅<BR/>
+    • Green ASG 移除了对 Listener/Rule 的依赖（避免循环）✅<BR/>
+    <BR/>
+    <B>零中断流程：</B><BR/>
+    1️⃣ 第 4 阶段：创建 Target Groups<BR/>
+    2️⃣ 第 5 阶段：创建 Launch Templates（提前）<BR/>
+    3️⃣ 第 6 阶段：创建 ASG + 等待实例健康（Terraform 轮询 TG 状态）<BR/>
+    4️⃣ 第 7 阶段：创建 Listener（此时 Blue TG 已有健康实例）✓<BR/>
+    5️⃣ 第 8 阶段：创建 Canary Rule（两个环境都健康）✓<BR/>
+    <BR/>
+    <B>优化配置：</B><BR/>
+    • wait_for_elb_capacity=instance_count (等待实例健康) ✅<BR/>
+    • wait_for_capacity_timeout=10m (给实例充足启动时间) ✅<BR/>
+    • deregistration_delay=30s (快速注销)<BR/>
+    • force_delete=true (强制删除保护)<BR/>
+    • timeout=15m (超时保护)<BR/>
+    • create_before_destroy=true (零停机更新)<BR/>
+    <BR/>
+    <B>结果：流量路由时实例已就绪，无 503 错误！</B><BR/>
+    <BR/>
+  >;
+  labelloc = t;
+  fontsize = 14;
+}

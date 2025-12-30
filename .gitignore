@@ -1,0 +1,181 @@
+# Claude Code 配置目录
+.claude/
+
+# ==================== Terraform 相关文件和目录 ====================
+
+# .terraform 目录包含插件和模块缓存
+**/.terraform/
+**/.terraform/*
+.terraform/
+
+# Terraform 依赖锁文件
+# 注意：团队协作时建议提交此文件以确保版本一致性
+# 如需提交，请删除下面这行
+**/.terraform.lock.hcl
+
+# Terraform 状态文件（包含敏感信息，绝不要提交！）
+**/*.tfstate
+**/*.tfstate.*
+*.tfstate
+*.tfstate.*
+
+# Terraform 变量文件（可能包含敏感信息如密码、密钥）
+**/terraform.tfvars
+**/*.auto.tfvars
+**/*.auto.tfvars.json
+terraform.tfvars
+*.auto.tfvars
+*.auto.tfvars.json
+
+# Terraform 计划输出文件
+**/*.tfplan
+*.tfplan
+
+# 崩溃日志文件
+**/crash.log
+**/crash.*.log
+crash.log
+crash.*.log
+
+# Terraform CLI 配置文件
+.terraformrc
+terraform.rc
+
+# 覆盖文件（用于本地开发覆盖）
+**/override.tf
+**/override.tf.json
+**/*_override.tf
+**/*_override.tf.json
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# ==================== 敏感信息文件 ====================
+
+# SSH 密钥文件
+**/*.pem
+**/*.ppk
+**/*.key
+*.pem
+*.ppk
+*.key
+
+# 环境变量文件
+**/.env
+**/.env.local
+**/.env.*.local
+.env
+.env.local
+.env.*.local
+
+# AWS 凭证文件
+.aws/
+**/credentials
+**/config
+
+# ==================== 备份和临时文件 ====================
+
+# 备份文件
+**/*.backup
+**/*.bak
+*.backup
+*.bak
+
+# 临时文件
+**/*.tmp
+**/tmp/
+**/temp/
+*.tmp
+tmp/
+temp/
+
+# 日志文件
+**/*.log
+*.log
+
+# ==================== IDE 和编辑器文件 ====================
+
+# Visual Studio Code
+.vscode/
+**/.vscode/
+
+# JetBrains IDEs (IntelliJ, PyCharm, etc.)
+.idea/
+**/.idea/
+*.iml
+
+# Vim
+**/*.swp
+**/*.swo
+**/*~
+*.swp
+*.swo
+*~
+
+# Emacs
+**/*~
+**/#*#
+*~
+\#*\#
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# ==================== 系统文件 ====================
+
+# macOS
+.DS_Store
+**/.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+*~
+.directory
+.Trash-*
+
+# ==================== 编程语言相关 ====================
+
+# Python
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/*.pyd
+venv/
+env/
+ENV/
+.Python
+
+# Node.js
+**/node_modules/
+package-lock.json
+yarn.lock
+npm-debug.log*
+
+# Go
+**/vendor/
+**/*.exe
+**/*.test
+
+# ==================== 其他 ====================
+
+# Terraform Enterprise/Cloud
+.terraform.d/
+
+# 测试数据和配置
+**/test-data/
+**/*.tftest.hcl
+
+# 生成的文档（可选，如果需要提交图片请注释掉）
+# **/*.png
+# **/*.svg
+# **/*.pdf
