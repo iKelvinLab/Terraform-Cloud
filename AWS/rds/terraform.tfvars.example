@@ -1,0 +1,93 @@
+# Example Terraform Variables Configuration
+# Copy this file to terraform.tfvars and customize for your environment
+
+# General Configuration
+aws_region   = "us-east-1"
+environment  = "dev"
+project_name = "myproject"
+
+# Network Configuration
+vpc_cidr               = "10.0.0.0/16"
+database_subnet_cidrs  = ["10.0.1.0/24", "10.0.2.0/24"]
+allowed_cidr_blocks    = ["10.0.0.0/16"]
+
+# RDS Instance Configuration
+db_engine          = "postgres"  # Options: mysql, postgres, mariadb, oracle-*, sqlserver-*
+db_engine_version  = "15.8"
+db_instance_class  = "db.t3.micro"  # For production: db.r5.large, db.r6g.xlarge
+db_name            = "mydb"
+db_username        = "dbadmin"
+db_port            = 5432  # MySQL: 3306, SQL Server: 1433, Oracle: 1521
+
+# Password Configuration
+create_random_password = true  # Set to false if you want to provide db_password manually
+# db_password          = "YourSecurePassword123!"  # Uncomment if create_random_password = false
+
+# Storage Configuration
+allocated_storage     = 20      # Initial storage in GB (free tier: max 20GB)
+max_allocated_storage = 0       # Maximum storage for autoscaling (free tier: must be 0)
+storage_type          = "gp2"   # Options: gp2, gp3, io1, io2 (free tier: gp2)
+storage_encrypted     = false   # Always encrypt in production (free tier: must be false)
+# kms_key_id          = "arn:aws:kms:us-east-1:123456789012:key/12345678-1234-1234-1234-123456789012"
+# iops                = 3000    # Required for io1/io2 storage types
+
+# High Availability
+multi_az             = false  # Set to true for production
+publicly_accessible  = false  # Keep false for security
+
+# Backup Configuration
+backup_retention_period = 0              # Days to retain backups (0-35) (free tier: must be 0)
+backup_window          = "03:00-04:00"   # UTC time window
+maintenance_window     = "sun:04:00-sun:05:00"  # UTC time window
+skip_final_snapshot    = true            # Set to true for development/free tier
+delete_automated_backups = true
+
+# Monitoring Configuration
+monitoring_interval                        = 0     # Enhanced monitoring (0, 1, 5, 10, 15, 30, 60) (free tier: 0)
+performance_insights_enabled               = false # (free tier: must be false)
+performance_insights_retention_period      = 7     # 7 or 731 days
+enabled_cloudwatch_logs_exports            = ["postgresql"]  # MySQL: ["error", "general", "slowquery"]
+
+# Parameter Group Configuration
+create_db_parameter_group = true
+db_parameter_group_family = "postgres15"  # MySQL: mysql8.0, MariaDB: mariadb10.6
+db_parameters = [
+  {
+    name  = "log_connections"
+    value = "1"
+  },
+  {
+    name  = "log_disconnections"
+    value = "1"
+  },
+  {
+    name  = "log_statement"
+    value = "all"
+  }
+]
+
+# Option Group Configuration (mainly for MySQL/Oracle)
+create_db_option_group = false
+# db_major_engine_version = "15"
+# db_options = []
+
+# Upgrade and Maintenance
+auto_minor_version_upgrade  = true
+allow_major_version_upgrade = false
+apply_immediately           = false  # Changes applied during maintenance window
+
+# Security Configuration
+deletion_protection = false  # Prevent accidental deletion (free tier: recommended false)
+# ca_cert_identifier = "rds-ca-rsa2048-g1"
+
+# Secrets Manager Configuration
+store_credentials_in_secrets_manager = true
+secret_recovery_window_days          = 7  # 0 for immediate deletion
+
+# CloudWatch Alarms Configuration
+create_cloudwatch_alarms         = true
+cpu_utilization_threshold        = 80      # Percentage
+free_storage_space_threshold     = 5368709120  # 5 GB in bytes
+freeable_memory_threshold        = 536870912   # 512 MB in bytes
+database_connections_threshold   = 100
+# alarm_actions                  = ["arn:aws:sns:us-east-1:123456789012:rds-alarms"]
